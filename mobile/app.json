@@ -1,0 +1,86 @@
+{
+  "expo": {
+    "name": "Effi India",
+    "slug": "effi-india",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "scheme": "effi-india",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0F4C81"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.effiindia.app",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Effi India needs microphone access to let you speak with the municipal services AI agent.",
+        "NSCameraUsageDescription": "Effi India needs camera access so you can capture complaint evidence.",
+        "NSPhotoLibraryUsageDescription": "Effi India needs photo library access so you can attach complaint evidence from your gallery.",
+        "NSLocationWhenInUseUsageDescription": "Effi India needs your location to mark the complaint accurately."
+      },
+      "bitcode": false
+    },
+    "android": {
+      "package": "com.effiindia.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#0F4C81",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.CAMERA",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.WAKE_LOCK",
+        "android.permission.BLUETOOTH"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "@livekit/react-native-expo-plugin",
+        {
+          "android": {
+            "audioType": "communication"
+          }
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Effi India needs photo library access so you can attach complaint evidence from your gallery.",
+          "cameraPermission": "Effi India needs camera access so you can capture complaint evidence."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Effi India needs your location to mark the complaint accurately."
+        }
+      ],
+      "expo-router",
+      "expo-web-browser",
+      "expo-font",
+      "@config-plugins/react-native-webrtc"
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "964d5eb0-573c-4752-adff-2bb291ca245a"
+      }
+    },
+    "owner": "sahilpatil22s-team"
+  }
+}

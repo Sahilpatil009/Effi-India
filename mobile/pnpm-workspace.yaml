@@ -1,0 +1,3 @@
+patchedDependencies:
+  '@kaannn/react-native-waveform@0.1.4': patches/@kaannn__react-native-waveform@0.1.4.patch
+  '@supabase/supabase-js@2.106.1': patches/@supabase__supabase-js@2.106.1.patch

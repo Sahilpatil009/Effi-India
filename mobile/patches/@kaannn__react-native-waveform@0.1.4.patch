@@ -1,0 +1,13 @@
+diff --git a/android/src/main/java/com/audiowave/AudioWaveViewManager.kt b/android/src/main/java/com/audiowave/AudioWaveViewManager.kt
+index 3658d927de5c4fc494e5e5f5db05cc2523203193..0b8e3c1a747c3667ff71dcdff9192da04adad026 100644
+--- a/android/src/main/java/com/audiowave/AudioWaveViewManager.kt
++++ b/android/src/main/java/com/audiowave/AudioWaveViewManager.kt	
+@@ -210,7 +210,7 @@ class AudioWaveViewManager : SimpleViewManager<WaveformSeekBar>() {
+         }
+         
+         try {
+-            val array = samples.asArray()
++            val array = samples.asArray() ?: return
+             val sampleArray = IntArray(array.size())
+             for (i in 0 until array.size()) {
+                 sampleArray[i] = array.getInt(i)

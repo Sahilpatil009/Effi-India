@@ -8,10 +8,17 @@ import type { ImagePickerAsset } from "expo-image-picker";
 import { Alert } from "react-native";
 import type { ComplaintCategoryId } from "../constants/config";
 
-WebBrowser.maybeCompleteAuthSession();
+try {
+  WebBrowser.maybeCompleteAuthSession();
+} catch (error) {
+  console.warn("[auth] Failed to complete auth session on startup:", error);
+}
 
 const COMPLAINT_EVIDENCE_BUCKET = "complaint-evidence";
 const GOOGLE_PROVIDER = "google";
+const DEFAULT_SUPABASE_URL = "https://npfzziwsmncgaaqktcfz.supabase.co";
+const DEFAULT_SUPABASE_PUBLISHABLE_KEY =
+  "sb_publishable_tx-jGmcodJPzzrrxGO-cjw_QhBXbHB1";
 
 export type Profile = {
   id: string;
@@ -36,6 +43,11 @@ export type NearbyComplaint = ComplaintListItem & {
 
 let supabaseClient: SupabaseClient | null = null;
 
+type SafeSupabaseClientResult = {
+  client: SupabaseClient | null;
+  error: string | null;
+};
+
 function getRequiredEnv(name: string, fallback?: string): string {
   const value = process.env[name] ?? fallback;
   if (!value) {
@@ -51,27 +63,45 @@ function getRedirectUrl() {
 }
 
 export function getSupabaseClient(): SupabaseClient {
-  if (supabaseClient) {
-    return supabaseClient;
+  const { client, error } = getSupabaseClientSafe();
+  if (!client) {
+    throw new Error(error ?? "Unable to initialize Supabase client.");
   }
 
-  supabaseClient = createClient(
-    getRequiredEnv("EXPO_PUBLIC_SUPABASE_URL"),
-    getRequiredEnv(
-      "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
-      process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
-    ),
-    {
-      auth: {
-        storage: AsyncStorage,
-        autoRefreshToken: true,
-        persistSession: true,
-        detectSessionInUrl: false,
-      },
-    },
-  );
+  return client;
+}
 
-  return supabaseClient;
+export function getSupabaseClientSafe(): SafeSupabaseClientResult {
+  if (supabaseClient) {
+    return { client: supabaseClient, error: null };
+  }
+
+  try {
+    supabaseClient = createClient(
+      getRequiredEnv("EXPO_PUBLIC_SUPABASE_URL", DEFAULT_SUPABASE_URL),
+      getRequiredEnv(
+        "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+        process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ??
+          DEFAULT_SUPABASE_PUBLISHABLE_KEY,
+      ),
+      {
+        auth: {
+          storage: AsyncStorage,
+          autoRefreshToken: true,
+          persistSession: true,
+          detectSessionInUrl: false,
+        },
+      },
+    );
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Unable to initialize Supabase client.";
+    return { client: null, error: message };
+  }
+
+  return { client: supabaseClient, error: null };
 }
 
 export async function createSessionFromUrl(url: string) {

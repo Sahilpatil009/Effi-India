@@ -9,6 +9,7 @@ const TokenRequestSchema = z.object({
     .default("SANITATION"),
   language: z.string().default("en"),
   callerName: z.string().optional(),
+  roomName: z.string().optional(),
 });
 
 const {
@@ -68,6 +69,22 @@ async function verifySupabaseAccessToken(
   return (await response.json()) as VerifiedSupabaseUser;
 }
 
+function buildRoomName(
+  category: string,
+  language: string,
+  userId: string,
+  overrideRoomName?: string,
+) {
+  if (overrideRoomName?.trim()) {
+    return overrideRoomName.trim();
+  }
+
+  const userSuffix = userId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 8) || "guest";
+  const safeLanguage = language.trim().toLowerCase().replace(/[^a-z0-9-]/g, "") || "en";
+
+  return `effi-${category.toLowerCase()}-${safeLanguage}-${userSuffix}`;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -106,14 +123,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .json({ error: "Invalid request", details: parsed.error.flatten() });
   }
 
-  const { category, language, callerName } = parsed.data;
+  const { category, language, callerName, roomName: requestedRoomName } = parsed.data;
   const verifiedUser = await verifySupabaseAccessToken(accessToken);
   if (!verifiedUser) {
     return res.status(401).json({ error: "Invalid Supabase session" });
   }
 
-  const roomName = `effi-${category.toLowerCase()}-${language}-${uuidv4().slice(0, 8)}`;
-  const participantIdentity = `citizen-${uuidv4().slice(0, 8)}`;
+  const roomName = buildRoomName(
+    category,
+    language,
+    verifiedUser.id,
+    requestedRoomName,
+  );
+  const participantIdentity = `citizen-${verifiedUser.id.replace(/[^a-zA-Z0-9]/g, "").slice(0, 12) || uuidv4().slice(0, 8)}`;
   const participantName =
     callerName ??
     getMetadataString(verifiedUser.user_metadata, "full_name") ??
@@ -121,10 +143,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     verifiedUser.email?.split("@")[0] ??
     "Citizen";
 
+  const sessionMetadata = JSON.stringify({
+    category,
+    language,
+    userId: verifiedUser.id,
+    participantName,
+  });
+
   const token = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
     identity: participantIdentity,
     name: participantName,
-    metadata: JSON.stringify({ category, language, userId: verifiedUser.id }),
+    metadata: sessionMetadata,
     ttl: "10m",
   });
 

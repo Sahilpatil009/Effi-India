@@ -1,13 +1,13 @@
 /**
  * Central config for the mobile app.
  *
- * AGENT_API_URL must point to your machine's local IP (not localhost / 127.0.0.1)
- * when testing on a real device or Android emulator, because those can't reach
- * the host machine via localhost.
+ * AGENT_API_URL should point at the deployed token server base path.
+ * Use the /api base directly so the mobile app hits the function endpoint
+ * without depending on a deployment rewrite.
  */
 export const AGENT_API_URL =
   process.env.EXPO_PUBLIC_AGENT_API_URL ??
-  "https://token-server-tawny.vercel.app";
+  "https://token-server-tawny.vercel.app/api";
 
 export const COMPLAINT_CATEGORIES = [
   {

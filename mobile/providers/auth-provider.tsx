@@ -1,4 +1,11 @@
-import { AppState, type AppStateStatus } from "react-native";
+import {
+  AppState,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  type AppStateStatus,
+} from "react-native";
 import {
   createContext,
   useCallback,
@@ -8,12 +15,12 @@ import {
   useState,
   type PropsWithChildren,
 } from "react";
-import type { Session, User } from "@supabase/supabase-js";
+import type { Session, SupabaseClient, User } from "@supabase/supabase-js";
 import * as Linking from "expo-linking";
 import {
   createSessionFromUrl,
   fetchProfile,
-  getSupabaseClient,
+  getSupabaseClientSafe,
   signInWithGoogle,
   signOut,
   type Profile,
@@ -32,6 +39,23 @@ export interface AuthContextValue {
 
 export const AuthContext = createContext<AuthContextValue | null>(null);
 
+type AppConfigErrorProps = {
+  message: string;
+  onRetry: () => void;
+};
+
+function AppConfigErrorScreen({ message, onRetry }: AppConfigErrorProps) {
+  return (
+    <View style={styles.errorContainer}>
+      <Text style={styles.errorTitle}>App setup issue</Text>
+      <Text style={styles.errorBody}>{message}</Text>
+      <TouchableOpacity style={styles.retryButton} onPress={onRetry} activeOpacity={0.85}>
+        <Text style={styles.retryButtonText}>Retry</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 function createFallbackProfile(user: User): Profile {
   const metadata = user.user_metadata ?? {};
 
@@ -46,12 +70,31 @@ function createFallbackProfile(user: User): Profile {
 }
 
 export function AuthProvider({ children }: PropsWithChildren) {
-  const supabase = useMemo(() => getSupabaseClient(), []);
+  const [supabase, setSupabase] = useState<SupabaseClient | null>(null);
+  const [configError, setConfigError] = useState<string | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+
+  const initializeSupabase = useCallback(() => {
+    const { client, error } = getSupabaseClientSafe();
+
+    if (!client) {
+      setSupabase(null);
+      setConfigError(error ?? "Unable to initialize Supabase client.");
+      setIsLoading(false);
+      return;
+    }
+
+    setSupabase(client);
+    setConfigError(null);
+  }, []);
+
+  useEffect(() => {
+    initializeSupabase();
+  }, [initializeSupabase]);
 
   const hydrateProfile = useCallback(
     async (nextUser: User | null) => {
@@ -76,6 +119,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, [hydrateProfile, user]);
 
   useEffect(() => {
+    if (!supabase) {
+      return;
+    }
+
     let isMounted = true;
 
     const bootstrap = async () => {
@@ -153,7 +200,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       linkSubscription.remove();
       appStateSubscription.remove();
     };
-  }, [hydrateProfile, supabase.auth]);
+  }, [hydrateProfile, supabase]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -169,5 +216,54 @@ export function AuthProvider({ children }: PropsWithChildren) {
     [isLoading, profile, refreshProfile, session, user],
   );
 
+  if (configError) {
+    return (
+      <AppConfigErrorScreen
+        message={configError}
+        onRetry={() => {
+          setIsLoading(true);
+          initializeSupabase();
+        }}
+      />
+    );
+  }
+
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
+
+const styles = StyleSheet.create({
+  errorContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+    backgroundColor: "#F8FAFC",
+  },
+  errorTitle: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#0F172A",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  errorBody: {
+    fontSize: 14,
+    lineHeight: 21,
+    color: "#334155",
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  retryButton: {
+    minHeight: 48,
+    paddingHorizontal: 18,
+    borderRadius: 10,
+    backgroundColor: "#0F4C81",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  retryButtonText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "700",
+  },
+});

@@ -2,6 +2,11 @@
   "name": "effi-india-token-server",
   "version": "1.0.0",
   "private": true,
+  "scripts": {
+    "dev": "tsc --outDir .dev-dist && node scripts/dev.cjs",
+    "typecheck": "tsc --noEmit",
+    "test": "tsc --outDir .test-dist && node --test tests/*.test.cjs"
+  },
   "dependencies": {
     "livekit-server-sdk": "^2.15.0",
     "uuid": "^10.0.0",

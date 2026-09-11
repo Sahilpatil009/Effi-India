@@ -7,10 +7,9 @@ const TokenRequestSchema = z.object({
   category: z
     .enum(["SANITATION", "POTHOLE", "POWER_OUTAGE"])
     .default("SANITATION"),
-  language: z.string().default("en"),
-  callerName: z.string().optional(),
-  roomName: z.string().optional(),
-});
+  language: z.string().trim().toLowerCase().regex(/^[a-z]{2,3}(-[a-z0-9]{2,8})?$/).default("en"),
+  callerName: z.string().trim().min(1).max(100).optional(),
+}).strict();
 
 const {
   LIVEKIT_URL,
@@ -52,6 +51,7 @@ async function verifySupabaseAccessToken(
   }
 
   const response = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+    signal: AbortSignal.timeout(10_000),
     headers: {
       apikey: SUPABASE_PUBLISHABLE_KEY,
       Authorization: `Bearer ${accessToken}`,
@@ -66,29 +66,26 @@ async function verifySupabaseAccessToken(
     throw new Error(`Supabase auth verification failed: ${response.status}`);
   }
 
-  return (await response.json()) as VerifiedSupabaseUser;
+  const user = await response.json() as VerifiedSupabaseUser;
+  if (!z.string().uuid().safeParse(user.id).success) {
+    throw new Error("Invalid auth service response");
+  }
+  return user;
 }
 
 function buildRoomName(
   category: string,
   language: string,
-  userId: string,
-  overrideRoomName?: string,
+  sessionId: string,
 ) {
-  if (overrideRoomName?.trim()) {
-    return overrideRoomName.trim();
-  }
-
-  const userSuffix = userId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 8) || "guest";
-  const safeLanguage = language.trim().toLowerCase().replace(/[^a-z0-9-]/g, "") || "en";
-
-  return `effi-${category.toLowerCase()}-${safeLanguage}-${userSuffix}`;
+  return `effi-${category.toLowerCase()}-${language}-${sessionId}`;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.setHeader("Cache-Control", "no-store");
 
   if (req.method === "OPTIONS") {
     return res.status(200).end();
@@ -123,19 +120,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .json({ error: "Invalid request", details: parsed.error.flatten() });
   }
 
-  const { category, language, callerName, roomName: requestedRoomName } = parsed.data;
-  const verifiedUser = await verifySupabaseAccessToken(accessToken);
+  const { category, language, callerName } = parsed.data;
+  let verifiedUser: VerifiedSupabaseUser | null;
+  try {
+    verifiedUser = await verifySupabaseAccessToken(accessToken);
+  } catch {
+    return res.status(503).json({ error: "Sign-in verification is temporarily unavailable. Please retry." });
+  }
   if (!verifiedUser) {
     return res.status(401).json({ error: "Invalid Supabase session" });
   }
 
-  const roomName = buildRoomName(
-    category,
-    language,
-    verifiedUser.id,
-    requestedRoomName,
-  );
-  const participantIdentity = `citizen-${verifiedUser.id.replace(/[^a-zA-Z0-9]/g, "").slice(0, 12) || uuidv4().slice(0, 8)}`;
+  const sessionId = uuidv4();
+  const roomName = buildRoomName(category, language, sessionId);
+  const participantIdentity = `citizen-${sessionId}`;
   const participantName =
     callerName ??
     getMetadataString(verifiedUser.user_metadata, "full_name") ??
@@ -148,6 +146,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     language,
     userId: verifiedUser.id,
     participantName,
+    sessionId,
   });
 
   const token = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {

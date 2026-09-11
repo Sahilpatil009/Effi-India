@@ -35,7 +35,8 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/auth/callback") ||
     pathname.startsWith("/unauthorized")
 
-  if (!user && !isAuthRoute) {
+  if (!user && !isAuthRoute && pathname !== "/") {
+    if (pathname.startsWith("/api/")) return NextResponse.json({ error: "Please sign in." }, { status: 401 })
     const loginUrl = request.nextUrl.clone()
     loginUrl.pathname = "/login"
     loginUrl.searchParams.set("next", pathname)

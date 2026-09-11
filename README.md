@@ -12,7 +12,7 @@ An end-user mobile application built with **Expo React Native**. It allows citiz
 ### 2. **AI Voice Agent** (`/agent`)
 The backend conversational brain built with **Node.js, TypeScript, and LiveKit**. 
 - Handles the Audio stream, VAD (Voice Activity Detection), STT (Multi-language transcription via Deepgram).
-- Uses OpenAI GPT-4o for dynamic reasoning and Cartesia for regional Text-To-Speech.
+- Uses Gemini 2.5 Flash through an OpenAI-compatible client for reasoning and Cartesia for regional Text-To-Speech.
 - Enforces logic paths (e.g. asking for photos if the complaint category is `Pothole`) and triggers RPC calls to the user's mobile app.
 - Finally writes the compiled complaint into the database using Supabase.
 
@@ -77,3 +77,17 @@ Navigate to the `/supabase/migrations/` directory and run all `.sql` scripts seq
 - **AI Agent Tooling:** Tooling definitions and the integration logic for handling LLM tool calls reside in `agent/src/tools.ts` and `agent/src/agent.ts`.
 
 See [PROJECT.md](PROJECT.md) and [AGENTS.md](AGENTS.md) for more in-depth operational instructions.
+
+## Web MVP implementation
+
+See [the implementation and testing plan](docs/WEB_MVP_TEST_PLAN.md) and
+[the milestone log](docs/IMPLEMENTATION_PROGRESS.md) for scope and verified progress.
+
+For backend regression checks, run `pnpm run test` and `pnpm run typecheck`
+separately inside both `agent/` and `token-server/`. Tests use synthetic data
+and mocked external services; live voice and database checks are separate.
+
+For mobile JavaScript iteration, build/install the `development` EAS profile once,
+then run `pnpm exec expo start --dev-client` inside `mobile/`. Rebuild when native
+dependencies or native configuration change. Preview builds remain available for
+demonstration. See [PROJECT.md](PROJECT.md) for commands and configuration notes.

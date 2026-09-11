@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx/esm --test tests/*.test.ts",
     "dev": "node --env-file=.env.local --experimental-vm-modules --import tsx/esm src/agent.ts dev",
     "download-files": "node --env-file=.env.local --experimental-vm-modules --import tsx/esm src/agent.ts download-files",
     "build": "tsc",

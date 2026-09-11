@@ -12,9 +12,9 @@ const locationToolResultSchema = z.object({
   location: z
     .object({
       coords: z.object({
-        latitude: z.number(),
-        longitude: z.number(),
-        accuracy: z.number().nullable(),
+        latitude: z.number().min(-90).max(90),
+        longitude: z.number().min(-180).max(180),
+        accuracy: z.number().nonnegative().nullable(),
         altitude: z.number().nullable(),
         altitudeAccuracy: z.number().nullable(),
         heading: z.number().nullable(),
@@ -72,6 +72,7 @@ export function createComplaintTools({
         ),
     }),
     execute: async ({ prompt }) => {
+      state.location = null;
       try {
         const rawResponse = await requestClientLocation(ctx, state, prompt);
         const parsed = locationToolResultSchema.parse(JSON.parse(rawResponse));
@@ -110,6 +111,11 @@ export function createComplaintTools({
           message: "Photo collection must not be requested for power outage complaints.",
         };
       }
+
+      if (!state.location) {
+        return { status: "error" as const, message: "Collect device location before requesting a photo." };
+      }
+      state.photoUrl = null;
 
       try {
         const rawResponse = await requestClientPhoto(ctx, state, prompt);
@@ -176,6 +182,10 @@ export function createComplaintTools({
       requireLocation(state);
       requireAuthenticatedUser(state);
       requirePhotoIfNeeded(state);
+      const registrationKey = ctx.room.name;
+      if (!registrationKey) {
+        throw new Error("LiveKit room identity is missing.");
+      }
 
       const location = state.location;
       const userId = state.userId;
@@ -195,6 +205,7 @@ export function createComplaintTools({
       state.language = language || state.language;
 
       const inserted = await insertComplaint({
+        registrationKey,
         userId,
         category: state.category,
         problemType,
@@ -207,10 +218,19 @@ export function createComplaintTools({
         transcript: state.transcript,
       });
 
-      return {
-        complaintId: inserted.complaintId,
-        ticketNumber: inserted.ticketNumber,
-      };
+      // Persistence is authoritative. A lost UI notification must not turn a
+      // committed complaint into an apparent write failure.
+      try {
+        if (ctx.room.localParticipant && state.citizenIdentity) {
+          await ctx.room.localParticipant.publishData(
+            new TextEncoder().encode(JSON.stringify({ type: "complaint_registered", ...inserted })),
+            { reliable: true, topic: "effi.complaint", destination_identities: [state.citizenIdentity] },
+          );
+        }
+      } catch {
+        console.warn("[agent] Ticket saved; citizen receipt notification was not delivered.");
+      }
+      return inserted;
     },
   });
 

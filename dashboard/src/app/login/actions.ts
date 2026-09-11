@@ -16,7 +16,7 @@ export async function sendMagicLink(
   const email = String(formData.get("email") ?? "").trim().toLowerCase()
 
   if (!email) {
-    return { status: "error", message: "Enter an admin email address." }
+    return { status: "error", message: "Enter your email address." }
   }
 
   const headerStore = await headers()
@@ -41,6 +41,6 @@ export async function sendMagicLink(
 
   return {
     status: "success",
-    message: "Check your email for the dashboard sign-in link.",
+    message: "Check your email for your sign-in link. Open it in this browser.",
   }
 }

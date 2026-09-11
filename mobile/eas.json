@@ -4,12 +4,18 @@
     "appVersionSource": "local"
   },
   "build": {
+    "development": {
+      "extends": "base",
+      "developmentClient": true,
+      "distribution": "internal",
+      "android": { "buildType": "apk" }
+    },
     "base": {
       "pnpm": "10.28.2",
       "env": {
-        "EXPO_PUBLIC_AGENT_API_URL": "https://token-server-tawny.vercel.app/api",
-        "EXPO_PUBLIC_SUPABASE_URL": "https://npfzziwsmncgaaqktcfz.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_tx-jGmcodJPzzrrxGO-cjw_QhBXbHB1"
+        "EXPO_PUBLIC_AGENT_API_URL": "https://token-server-chi-eight.vercel.app/api",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://lmtgimyklueosoywasyr.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_e4ZdWepq5vD0Ed96a5YpRA_3gmSZ37b"
       }
     },
     "preview": {

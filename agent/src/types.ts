@@ -77,6 +77,8 @@ export interface SessionState {
 }
 
 export interface ComplaintInsertInput {
+  /** Server-controlled LiveKit room name; stable across retries in this call. */
+  registrationKey: string;
   userId: string;
   category: ComplaintCategory;
   problemType: string;

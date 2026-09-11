@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Effi India Admin",
-  description: "Complaint triage dashboard for Effi India.",
+  title: "Effi India | Your voice, your neighbourhood",
+  description: "Report civic issues by voice and track your requests.",
 };
 
 export default function RootLayout({

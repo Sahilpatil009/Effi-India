@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createHash } from "node:crypto";
 import {
   COMPLAINT_EVIDENCE_BUCKET,
   type ComplaintInsertInput,
@@ -34,30 +35,40 @@ export function getSupabaseAdminClient(): SupabaseClient {
   return supabaseAdminClient;
 }
 
-function generateTicketNumber(): string {
-  const stamp = Date.now().toString(36).toUpperCase();
-  const nonce = Math.random().toString(36).slice(2, 8).toUpperCase();
-  return `EFF-${stamp}-${nonce}`;
+export function generateTicketNumber(userId: string, registrationKey: string): string {
+  if (!userId || !registrationKey) throw new Error("Missing registration identity.");
+  // The existing unique ticket_number constraint arbitrates concurrent workers.
+  // One call represents one complaint, even if a tool retries after a lost response.
+  const hash = createHash("sha256")
+    .update(JSON.stringify([userId, registrationKey]))
+    .digest("hex").slice(0, 24).toUpperCase();
+  return `EFF-${hash}`;
 }
 
-function parseStoragePath(photoUrl: string | null): string | null {
+export function parseStoragePath(photoUrl: string | null, category: string, roomName: string, supabaseUrl: string): string | null {
   if (!photoUrl) {
     return null;
   }
 
+  const url = new URL(photoUrl);
   const marker = `/storage/v1/object/public/${COMPLAINT_EVIDENCE_BUCKET}/`;
-  const markerIndex = photoUrl.indexOf(marker);
-  if (markerIndex === -1) {
-    return null;
+  const sanitize = (value: string) => value.trim().toLowerCase().replace(/[^a-z0-9-_]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+  const path = decodeURIComponent(url.pathname.slice(marker.length));
+  const prefix = `${sanitize(category)}/${sanitize(roomName)}/`;
+  if (url.origin !== new URL(supabaseUrl).origin || url.username || url.password || url.search || url.hash ||
+      !url.pathname.startsWith(marker) || !path.startsWith(prefix) ||
+      !/^[a-zA-Z0-9_-]+\.[a-zA-Z0-9]+$/.test(path.slice(prefix.length))) {
+    throw new Error("Photo must belong to this complaint session in the configured evidence bucket.");
   }
-
-  return photoUrl.slice(markerIndex + marker.length) || null;
+  return path;
 }
 
-export async function insertComplaint(input: ComplaintInsertInput) {
-  const supabase = getSupabaseAdminClient();
-  const ticketNumber = generateTicketNumber();
-  const storagePath = parseStoragePath(input.photoUrl);
+export async function insertComplaint(
+  input: ComplaintInsertInput,
+  supabase = getSupabaseAdminClient(),
+) {
+  const ticketNumber = generateTicketNumber(input.userId, input.registrationKey);
+  const storagePath = input.photoUrl ? parseStoragePath(input.photoUrl, input.category, input.registrationKey, getRequiredEnv("SUPABASE_URL")) : null;
 
   const { data, error } = await supabase.rpc("create_complaint_ticket", {
     complaint_payload: {
@@ -84,6 +95,17 @@ export async function insertComplaint(input: ComplaintInsertInput) {
   });
 
   if (error) {
+    // A committed RPC may have lost its response, or another worker may have
+    // won the unique insert. Recover only this user's exact persisted ticket.
+    const { data: existing, error: lookupError } = await supabase
+      .from("complaints")
+      .select("id,ticket_number")
+      .eq("ticket_number", ticketNumber)
+      .eq("user_id", input.userId)
+      .maybeSingle();
+    if (!lookupError && existing?.id && existing?.ticket_number === ticketNumber) {
+      return { complaintId: existing.id as string, ticketNumber };
+    }
     throw new Error(`Supabase insert failed: ${error.message}`);
   }
 

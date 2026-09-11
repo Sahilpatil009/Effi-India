@@ -34,7 +34,7 @@ export function LoginForm() {
     <Card className="w-full max-w-sm border-[#D9E3EA] shadow-sm">
       <CardHeader className="space-y-1">
         <CardTitle className="text-xl text-[#1E293B]">
-          Admin sign in
+          Sign in to Effi India
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -46,7 +46,7 @@ export function LoginForm() {
               name="email"
               type="email"
               autoComplete="email"
-              placeholder="admin@example.com"
+              placeholder="you@example.com"
               required
             />
           </div>

@@ -30,7 +30,8 @@ export async function updateComplaintStatus(id: string, status: ComplaintStatus)
     throw new Error(error.message)
   }
 
-  revalidatePath("/")
+  revalidatePath("/admin")
+  revalidatePath("/requests")
 }
 
 export async function signOut() {

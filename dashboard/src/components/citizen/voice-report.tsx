@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { Room, RoomEvent, Track, type RpcInvocationData } from "livekit-client"
-import { Mic, MapPin, CheckCircle2 } from "lucide-react"
+import { Mic, MapPin, CheckCircle2, ImageIcon } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import type { ComplaintCategory } from "@/lib/dashboard/types"
 
@@ -22,9 +23,11 @@ export function VoiceReport({ category }: { category: ComplaintCategory }) {
   const [busy, setBusy] = useState(false)
   const [receipt, setReceipt] = useState<{ complaintId: string; ticketNumber: string } | null>(null)
   const [muted, setMuted] = useState(false)
+  const [preview, setPreview] = useState<string | null>(null)
   const roomRef = useRef<Room | null>(null)
   const actionRef = useRef<Action | null>(null)
   const audioRef = useRef<HTMLDivElement>(null)
+  const transcriptRef = useRef<HTMLDivElement>(null)
   const generation = useRef(0)
 
   useEffect(() => () => {
@@ -34,6 +37,14 @@ export function VoiceReport({ category }: { category: ComplaintCategory }) {
     roomRef.current = null
   }, [])
 
+  useEffect(() => {
+    transcriptRef.current?.scrollTo({ top: transcriptRef.current.scrollHeight, behavior: "smooth" })
+  }, [lines, action])
+
+  useEffect(() => () => {
+    if (preview) URL.revokeObjectURL(preview)
+  }, [preview])
+
   function end() {
     generation.current++
     actionRef.current?.finish({ status: "cancelled", message: "Call ended." })
@@ -41,7 +52,13 @@ export function VoiceReport({ category }: { category: ComplaintCategory }) {
     roomRef.current = null
     void room?.disconnect()
     audioRef.current?.replaceChildren()
+    if (preview) {
+      URL.revokeObjectURL(preview)
+      setPreview(null)
+    }
     setActive(false)
+    setAction(null)
+    setBusy(false)
     setStatus("Call ended")
   }
 
@@ -51,6 +68,10 @@ export function VoiceReport({ category }: { category: ComplaintCategory }) {
     const room = new Room()
     roomRef.current = room
     setError(""); setReceipt(null); setLines([]); setActive(true); setMuted(false)
+    if (preview) {
+      URL.revokeObjectURL(preview)
+      setPreview(null)
+    }
     setStatus("Connecting…")
     const isCurrent = () => generation.current === run && roomRef.current === room
     function requestAction(kind: Action["kind"], data: RpcInvocationData) {
@@ -149,6 +170,8 @@ export function VoiceReport({ category }: { category: ComplaintCategory }) {
     if (!pending || !room || !file) return
     if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 5 * 1024 * 1024) { setError("Choose a JPG, PNG or WebP image smaller than 5 MB."); return }
     setBusy(true); setError("")
+    if (preview) URL.revokeObjectURL(preview)
+    setPreview(URL.createObjectURL(file))
     const extension = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" }[file.type]
     const path = `${category.toLowerCase()}/${room.name}/${crypto.randomUUID()}.${extension}`
     try {
@@ -160,31 +183,49 @@ export function VoiceReport({ category }: { category: ComplaintCategory }) {
       pending.finish({ status: "ok", photoUrl: data.publicUrl })
     } catch {
       if (actionRef.current === pending) { pending.finish({ status: "error", message: "Photo upload failed." }); setError("Photo upload failed. Ask Effi to request it again.") }
+      if (preview) {
+        URL.revokeObjectURL(preview)
+        setPreview(null)
+      }
+    }
+  }
+
+  async function toggleMute() {
+    const room = roomRef.current
+    if (!room) return
+    const nextMuted = !muted
+    try {
+      // muted=true means microphone disabled; enabled = !muted
+      await room.localParticipant.setMicrophoneEnabled(!nextMuted)
+      setMuted(nextMuted)
+    } catch {
+      setError("Could not change microphone. Check browser permissions.")
     }
   }
 
   return <div className="mx-auto max-w-3xl">
     <Link href="/" className="text-sm text-[#185079]">← All categories</Link>
     <h1 className="mt-5 text-3xl font-semibold">Report {labels[category].toLowerCase()}</h1>
-    <p className="mt-3 text-slate-500">Describe the issue in your own words. Effi will guide you through the details.</p>
+    <p className="mt-3 text-slate-500">Describe the issue in your own words. Effi will guide you through the details. {category !== "POWER_OUTAGE" ? "You will be asked for location and a photo." : "You will be asked for your location."}</p>
     <div className="mt-8 rounded-2xl border bg-white p-6 sm:p-8">
-      <div className="flex flex-wrap items-center justify-between gap-4"><div className="flex items-center gap-3"><span className="rounded-full bg-sky-50 p-4 text-[#185079]"><Mic /></span><div><p className="font-semibold">Effi voice assistant</p><p role="status" className="text-sm capitalize text-slate-500">{status}</p></div></div>
+      <div className="flex flex-wrap items-center justify-between gap-4"><div className="flex items-center gap-3"><span className="rounded-full bg-sky-50 p-4 text-[#185079]"><Mic /></span><div><p className="font-semibold">Effi voice assistant</p><p role="status" aria-live="polite" className="text-sm capitalize text-slate-500">{status}</p><p className="text-xs text-slate-400">{active ? (muted ? "Microphone muted" : "Microphone live") : "Idle"}</p></div></div>
         <label className="text-sm">Language<select className="ml-2 rounded-lg border p-2" disabled={active} value={language} onChange={(event) => setLanguage(event.target.value)}><option value="en">English</option><option value="hi">Hindi</option></select></label>
       </div>
-      <div role="log" aria-label="Conversation transcript" className="my-6 max-h-80 min-h-40 space-y-4 overflow-y-auto rounded-xl bg-slate-50 p-5">
-        {lines.length ? lines.map((line) => <div key={line.id}><p className="text-xs font-semibold text-[#185079]">{line.speaker}</p><p className="mt-1 leading-relaxed">{line.text}</p></div>) : <p className="text-sm text-slate-500">Your conversation will appear here after you start. You can end the call at any time.</p>}
+      <div ref={transcriptRef} role="log" aria-label="Conversation transcript" aria-live="polite" className="my-6 max-h-80 min-h-40 space-y-4 overflow-y-auto rounded-xl bg-slate-50 p-5">
+        {lines.length ? lines.map((line) => <div key={line.id} className={line.speaker === "You" ? "text-slate-700" : "text-slate-900"}><p className="text-xs font-semibold text-[#185079]">{line.speaker}</p><p className="mt-1 leading-relaxed">{line.text}</p></div>) : <p className="text-sm text-slate-500">Your conversation will appear here after you start. You can end the call at any time.</p>}
       </div>
-      {action && <section className="mb-5 rounded-xl border border-sky-200 bg-sky-50 p-5"><p className="mb-4 font-medium">{action.prompt}</p>
-        {action.kind === "location" ? <button className={button} disabled={busy} onClick={shareLocation}><MapPin className="mr-2 inline size-4" />{busy ? "Finding location…" : "Share device location"}</button> : <label className="block text-sm font-medium">{busy ? "Uploading photo…" : "Choose an evidence photo (up to 5 MB)"}<input aria-label="Evidence photo" type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} className="mt-3 block w-full text-sm" onChange={(event) => void upload(event.target.files?.[0])} /></label>}
-        <button className="ml-4 text-sm underline" onClick={() => action.finish({ status: "cancelled", message: "Citizen cancelled." })}>Cancel</button>
+      {action && <section aria-live="polite" className="mb-5 rounded-xl border border-sky-200 bg-sky-50 p-5"><p className="mb-4 font-medium">{action.prompt}</p>
+        {action.kind === "location" ? <button className={button} disabled={busy} onClick={shareLocation}><MapPin className="mr-2 inline size-4" />{busy ? "Finding location…" : "Share device location"}</button> : <div><label className="block text-sm font-medium">{busy ? "Uploading photo…" : "Choose an evidence photo (JPG/PNG/WebP, up to 5 MB)"}<input aria-label="Evidence photo" type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} className="mt-3 block w-full text-sm" onChange={(event) => void upload(event.target.files?.[0])} /></label>{preview && <div className="mt-4 flex items-center gap-3 rounded-lg bg-white p-3"><Image src={preview} alt="Selected evidence preview" width={120} height={90} unoptimized className="rounded-lg object-cover" /><span className="flex items-center gap-1 text-xs text-slate-500"><ImageIcon className="size-4" />Preview</span></div>}</div>}
+        <button className="ml-4 mt-4 text-sm underline" onClick={() => action.finish({ status: "cancelled", message: "Citizen cancelled." })}>Dismiss request</button>
       </section>}
       {error && <p role="alert" className="mb-5 rounded-lg bg-red-50 p-4 text-sm text-red-700">{error}</p>}
-      {receipt && <section className="mb-5 rounded-xl bg-emerald-50 p-5 text-emerald-900"><CheckCircle2 className="mb-2" /><h2 className="font-semibold">Complaint registered</h2><p className="mt-2 break-all font-mono text-sm">{receipt.ticketNumber}</p><Link className="mt-3 inline-block underline" href={`/requests/${receipt.complaintId}`}>View your ticket</Link></section>}
+      {receipt && <section className="mb-5 rounded-xl bg-emerald-50 p-5 text-emerald-900" aria-live="polite"><CheckCircle2 className="mb-2" /><h2 className="font-semibold">Complaint registered</h2><p className="mt-2 break-all font-mono text-sm">{receipt.ticketNumber}</p><p className="mt-1 text-sm">Saved. You can close this call — the ticket remains in My requests.</p><Link className="mt-3 inline-block underline" href={`/requests/${receipt.complaintId}`}>View your ticket</Link></section>}
       <div className="flex flex-wrap gap-3">{active ? <>
         <button className="rounded-xl bg-red-600 px-5 py-3 text-sm font-semibold text-white" onClick={end}>End call</button>
-        <button className="rounded-xl border px-5 py-3 text-sm" onClick={async () => { try { await roomRef.current?.localParticipant.setMicrophoneEnabled(muted); setMuted(!muted) } catch { setError("Could not change microphone. Check browser permissions.") } }}>{muted ? "Unmute" : "Mute"}</button>
+        <button className="rounded-xl border px-5 py-3 text-sm" onClick={() => void toggleMute()}>{muted ? "Unmute" : "Mute"}</button>
         <button className="rounded-xl border px-5 py-3 text-sm" onClick={() => void roomRef.current?.startAudio().catch(() => setError("Browser blocked audio. Check site sound permissions."))}>Enable sound</button>
       </> : <button className={button} onClick={() => void start()}>Start voice report</button>}<Link href="/requests" className="px-4 py-3 text-sm text-[#185079]">My requests →</Link></div>
+      <p className="mt-4 text-xs text-slate-400">Tip: use Chrome/Edge on localhost or HTTPS for microphone + location. If permission was denied, reset it in site settings and retry.</p>
       <div ref={audioRef} className="hidden" />
     </div>
   </div>
